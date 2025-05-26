@@ -1,0 +1,17 @@
+backup_urls:
+- https://www.ftb.ca.gov/forms/search/?query=corporation
+base_url: https://www.ftb.ca.gov
+extraction_hints:
+  keywords:
+  - corporation tax
+  - franchise tax
+  - tax rate
+nexus_effective_date: '2018'
+nexus_standard: market base
+sales_factor_date: '2018'
+sales_factor_method: market base
+state_code: CA
+state_name: California
+tax_definitions_url: https://www.ftb.ca.gov/businesses/index.html
+tax_types:
+- corporate_income

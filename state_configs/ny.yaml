@@ -1,0 +1,20 @@
+backup_urls:
+- https://www.tax.ny.gov/bus/ct/ctidx.htm
+base_url: https://www.tax.ny.gov
+extraction_hints:
+  capital_keywords:
+  - business capital base
+  eni_keywords:
+  - entire net income
+  - business income tax rate
+  fdm_keywords:
+  - fixed dollar minimum tax
+nexus_effective_date: '2014'
+nexus_standard: market base
+sales_factor_date: '2014'
+sales_factor_method: market base
+state_code: NY
+state_name: New York
+tax_definitions_url: https://www.tax.ny.gov/bus/ct/def_art9a.htm
+tax_types:
+- corporate_income
