@@ -1,0 +1,26 @@
+state_name: "Florida"
+state_code: "FL"
+base_url: "https://floridarevenue.com"
+tax_definitions_url: "https://floridarevenue.com/taxes/taxesfees/Pages/corporate.aspx"
+backup_urls:
+  - "https://floridarevenue.com/businesses/"
+  - "https://floridarevenue.com/forms/"
+tax_types:
+  - "corporate_income"
+extraction_hints:
+  keywords:
+    - "corporate income tax"
+    - "corporation tax"
+    - "tax rate"
+    - "5.5%"
+  known_rates:
+    - "5.5%"
+nexus_standard: "market base"
+nexus_effective_date: "2021"
+sales_factor_method: "market base"
+sales_factor_date: "2021"
+fallback_selectors:
+  content_area:
+    - ".main-content"
+    - "#content"
+    - ".corporate-tax" 
