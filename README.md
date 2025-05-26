@@ -2,14 +2,21 @@
 
 ## 🎯 專案概述
 
-這是一個基於 **LLM 智能分析** 的美國各州稅率自動萃取工具，專為會計師和稅務專業人士設計。透過 Google Gemini AI 的強大分析能力，能夠自動從各州政府官網抓取並解析企業所得稅率資訊，大幅減少手動查找和整理的工作量。
+這是一個基於 **LLM 智能分析** 的美國各州稅率自動萃取工具，**專門針對 C-Corporation 航運業**設計。透過 Google Gemini AI 的強大分析能力，能夠自動從各州政府官網抓取並解析企業所得稅率資訊，特別關注航運業相關的稅率優惠和特殊條款，大幅減少手動查找和整理的工作量。
+
+### 🚢 專業定位
+- **目標客戶**: C-Corporation 航運/海運公司
+- **聚焦領域**: 企業所得稅 (ENI)、固定最低稅額 (FDM)、資本稅 (Capital)
+- **產業優勢**: 自動識別航運業特殊稅率、免稅條件和優惠政策
 
 ### 🔥 核心特色
 
+- ✅ **航運業專精**: 自動識別水運、海運相關的特殊稅率和優惠條款
+- ✅ **C-Corp 專用**: 僅分析 C-Corporation 適用稅率，過濾其他實體類型
 - ✅ **智能網頁解析**: 使用 Gemini LLM 自動理解不同州政府網站的結構
 - ✅ **配置驅動**: 每個州使用獨立的 YAML 配置文件，無需修改程式碼
-- ✅ **統一輸出格式**: 所有州的稅率資訊輸出為標準化的 Excel 格式
-- ✅ **完整審計追蹤**: 記錄 AI 分析的推理過程，確保結果可追溯
+- ✅ **精準輸出**: 只輸出相關稅項，自動過濾無關或N/A的項目
+- ✅ **完整審計追蹤**: 記錄 AI 分析的推理過程，特別標註航運業特殊條款
 - ✅ **容錯機制**: 多重備用 URL 和降級策略，確保高可用性
 
 ### 📊 已驗證效果
@@ -70,15 +77,25 @@ python create_excel_with_gemini.py
 - `output/ny_tax_summary_YYYYMMDD_HHMMSS.xlsx` - Excel 報表
 - `output/ny_tax_llm_reasoning.txt` - AI 分析推理過程
 
-### 4. 運行多州框架
+### 4. 運行多州框架（針對 C-Corp 航運業）
 
 ```bash
+# 預設運行 5 個主要州（NY, CA, TX, FL, IL）的 C-Corp 航運業稅率分析
 python multi_state_tax_extractor.py
+
+# 指定特定州份
+python multi_state_tax_extractor.py --states NY CA FL
+
+# 分析其他實體類型或產業（可選）
+python multi_state_tax_extractor.py --entity_type S_corp --industry manufacturing
+
+# 查看完整參數說明
+python multi_state_tax_extractor.py --help
 ```
 
 **輸出檔案**:
 - `multi_state_output/multi_state_tax_summary_YYYYMMDD_HHMMSS.xlsx` - 多州 Excel 報表
-- `multi_state_output/multi_state_reasoning_log.txt` - 各州分析日誌
+- `multi_state_output/multi_state_reasoning_log.txt` - 各州分析日誌（包含航運業特殊條款分析）
 
 ## 📋 輸出格式說明
 
@@ -89,8 +106,16 @@ python multi_state_tax_extractor.py
 | State | 州名 | New York |
 | State Code | 州代碼 | NY |
 | Nexus Standard | 稅務管轄標準 | market base |
-| Tax Base Summary | **核心稅率資訊** | ENI: 一般企業稅率為 0.065; Capital: 一般企業稅率為 0.001875; FDM: 依營收分級課稅，從$25到$200,000不等 |
+| Tax Base Summary | **核心稅率資訊** | ENI: 6.5%; FDM: $25 to $200,000 (C-corp in shipping) |
 | Source URL | 資料來源網址 | https://www.tax.ny.gov/... |
+
+### 🚢 航運業特殊標識
+
+系統會自動在推理日誌中標註：
+- **Special shipping rule**: 航運業特殊稅率或優惠
+- **Water transportation**: 水運相關條款
+- **Marine services**: 海運服務特殊規定
+- **Port activity**: 港口活動相關稅務
 
 ### 稅率類型解釋
 
@@ -130,27 +155,52 @@ python multi_state_tax_extractor.py
 
 ```yaml
 # state_configs/fl.yaml
-state_name: "Florida"
-state_code: "FL"
-base_url: "https://floridarevenue.com"
-tax_definitions_url: "https://floridarevenue.com/taxes/corp_inc/"
+state_name: Florida
+state_code: FL
+base_url: https://floridarevenue.com
+tax_definitions_url: https://floridarevenue.com/taxes/taxesfees/Pages/corporate.aspx
 backup_urls:
-  - "https://floridarevenue.com/businesses/"
-  - "https://floridarevenue.com/forms/"
+  - https://floridarevenue.com/businesses/
+  - https://floridarevenue.com/forms/
+
+# 業務場景配置（重要）
+entity_type: C_corp          # 實體類型：C_corp, S_corp, LLC
+industry: shipping           # 產業：shipping, manufacturing, retail
+included_fields:            # 需要萃取的稅項
+  - ENI                     # 企業所得稅
+  - FDM                     # 固定最低稅額
+  - Capital                 # 資本稅（可選）
+
+tax_types:
+  - corporate_income
 
 # LLM 分析提示
 extraction_hints:
   keywords:
-    - "corporate income tax"
-    - "franchise tax"
-    - "5.5%"  # 已知的佛州稅率
+    - corporate income tax
+    - corporation tax
+    - 5.5%                  # 已知稅率（幫助驗證）
+  shipping_keywords:        # 航運業關鍵字
+    - water transportation
+    - marine transportation
+    - shipping
+    - port activity
 
 # 州特定資訊
-nexus_standard: "market base"
-nexus_effective_date: "2021"
-sales_factor_method: "market base"
-sales_factor_date: "2021"
+nexus_standard: market base
+nexus_effective_date: '2021'
+sales_factor_method: market base
+sales_factor_date: '2021'
 ```
+
+### 📋 配置欄位說明
+
+| 欄位 | 說明 | 可選值 | 預設值 |
+|------|------|--------|--------|
+| `entity_type` | 公司實體類型 | `C_corp`, `S_corp`, `LLC`, `Partnership` | `C_corp` |
+| `industry` | 目標產業 | `shipping`, `manufacturing`, `retail`, 等 | `shipping` |
+| `included_fields` | 需萃取的稅項 | `["ENI", "FDM", "Capital"]` | `["ENI", "FDM"]` |
+| `shipping_keywords` | 航運業關鍵字 | 自訂列表 | 包含水運、海運等 |
 
 ### 2. 運行測試
 

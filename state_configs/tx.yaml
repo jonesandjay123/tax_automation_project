@@ -1,26 +1,41 @@
-state_name: "Texas"
-state_code: "TX"
-base_url: "https://comptroller.texas.gov"
-tax_definitions_url: "https://comptroller.texas.gov/taxes/franchise/"
+state_name: Texas
+state_code: TX
+base_url: https://comptroller.texas.gov
+tax_definitions_url: https://comptroller.texas.gov/taxes/franchise/
 backup_urls:
-  - "https://comptroller.texas.gov/taxes/franchise/rates/"
-  - "https://comptroller.texas.gov/businesses/"
+  - https://comptroller.texas.gov/taxes/franchise/rates/
+  - https://comptroller.texas.gov/businesses/
+
+# Business context
+entity_type: C_corp
+industry: shipping
+included_fields:
+- ENI
+- FDM
+
 tax_types:
-  - "corporate_income"
+- corporate_income
+
 extraction_hints:
   keywords:
-    - "franchise tax"
-    - "margin tax"
-    - "tax rate"
-    - "no corporate income tax"
-    - "0.75%"
+    - franchise tax
+    - margin tax
+    - tax rate
+    - no corporate income tax
+    - 0.75%
+  shipping_keywords:
+    - water transportation
+    - marine transportation
+    - shipping
   known_rates:
-    - "0.75%"
-    - "0.375%"
-nexus_standard: "market base"
-nexus_effective_date: "2008"
-sales_factor_method: "market base"
-sales_factor_date: "2008"
+    - 0.75%
+    - 0.375%
+
+nexus_standard: market base
+nexus_effective_date: '2008'
+sales_factor_method: market base
+sales_factor_date: '2008'
+
 fallback_selectors:
   content_area:
     - ".main-content"

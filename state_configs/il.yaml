@@ -1,25 +1,41 @@
-state_name: "Illinois"
-state_code: "IL"
-base_url: "https://tax.illinois.gov"
-tax_definitions_url: "https://tax.illinois.gov/research/taxinformation/income/corporate.html"
+state_name: Illinois
+state_code: IL
+base_url: https://tax.illinois.gov
+tax_definitions_url: https://tax.illinois.gov/research/taxinformation/income/corporate.html
 backup_urls:
-  - "https://tax.illinois.gov/businesses.html"
-  - "https://tax.illinois.gov/research/publications.html"
+  - https://tax.illinois.gov/businesses.html
+  - https://tax.illinois.gov/research/publications.html
+
+# Business context
+entity_type: C_corp
+industry: shipping
+included_fields:
+- ENI
+- FDM
+
 tax_types:
-  - "corporate_income"
+- corporate_income
+
 extraction_hints:
   keywords:
-    - "corporate income tax"
-    - "corporation tax"
-    - "tax rate"
-    - "7%"
+    - corporate income tax
+    - corporation tax
+    - tax rate
+    - 7%
+  shipping_keywords:
+    - water transportation
+    - marine transportation
+    - shipping
+    - river transportation
   known_rates:
-    - "7%"
-    - "7.0%"
-nexus_standard: "market base"
-nexus_effective_date: "2020"
-sales_factor_method: "market base"
-sales_factor_date: "2020"
+    - 7%
+    - 7.0%
+
+nexus_standard: market base
+nexus_effective_date: '2020'
+sales_factor_method: market base
+sales_factor_date: '2020'
+
 fallback_selectors:
   content_area:
     - ".main-content"

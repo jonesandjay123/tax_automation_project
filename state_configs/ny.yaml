@@ -9,6 +9,10 @@ extraction_hints:
   - business income tax rate
   fdm_keywords:
   - fixed dollar minimum tax
+  shipping_keywords:
+  - water transportation
+  - marine
+  - shipping
 nexus_effective_date: '2014'
 nexus_standard: market base
 sales_factor_date: '2014'
@@ -18,3 +22,11 @@ state_name: New York
 tax_definitions_url: https://www.tax.ny.gov/bus/ct/def_art9a.htm
 tax_types:
 - corporate_income
+
+# Business context
+entity_type: C_corp
+industry: shipping
+included_fields:
+- ENI
+- FDM
+- Capital

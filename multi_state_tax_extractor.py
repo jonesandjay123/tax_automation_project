@@ -27,6 +27,8 @@ from enum import Enum
 import requests
 from bs4 import BeautifulSoup
 from openpyxl import Workbook
+from openpyxl.styles import Font
+from openpyxl.worksheet.hyperlink import Hyperlink
 import google.generativeai as genai
 
 # ---------------- Configuration Models ----------------
@@ -47,6 +49,11 @@ class StateConfig:
     base_url: str
     tax_definitions_url: str
     backup_urls: List[str] = None
+    
+    # Business context
+    entity_type: str = "C_corp"  # C_corp, S_corp, LLC, etc.
+    industry: str = "shipping"   # shipping, manufacturing, retail, etc.
+    included_fields: List[str] = None  # ["ENI", "FDM", "Capital"]
     
     # Tax types to extract
     tax_types: List[TaxType] = None
@@ -79,7 +86,7 @@ class TaxAnalysisEngine:
             self.model = None
             self.available = False
     
-    def analyze_tax_content(self, content: str, state_name: str, tax_type: str) -> Tuple[Dict[str, str], str]:
+    def analyze_tax_content(self, content: str, state_name: str, config: StateConfig) -> Tuple[Dict[str, str], str]:
         """
         Analyze raw HTML/text content and extract tax rates using LLM
         
@@ -90,51 +97,168 @@ class TaxAnalysisEngine:
         if not self.available:
             return {}, "[LLM not available]"
         
-        prompt = f"""
-You are a tax analysis expert. Please analyze the following {state_name} state tax content for {tax_type} taxes.
+        # Build industry-specific context
+        industry_context = ""
+        if config.industry == "shipping":
+            industry_context = """
+INDUSTRY CONTEXT: This analysis is for a SHIPPING/MARINE TRANSPORTATION company.
+- Look for any special rates, exemptions, or rules for water transportation, marine services, or shipping companies
+- Note any tonnage taxes, port fees, or maritime-specific tax structures
+- Identify if standard corporate rates apply or if there are industry-specific overrides
+"""
+        
+        # Build entity-specific context
+        entity_context = ""
+        if config.entity_type == "C_corp":
+            entity_context = """
+ENTITY TYPE: This is for a C-CORPORATION (regular corporation).
+- Focus ONLY on rates applicable to C-corporations
+- IGNORE any rules for S-corporations, LLCs, partnerships, sole proprietorships
+- IGNORE special rules for banks, insurance companies, utilities, or REITs
+- Look for rates applicable to "general business taxpayers" or "all other corporations"
+"""
+
+        # Determine which fields to extract
+        included_fields = config.included_fields or ["ENI", "FDM", "Capital"]
+        fields_instruction = f"Focus on extracting these specific tax components: {', '.join(included_fields)}"
+
+        # Check if this is NY (use detailed descriptions) or other states (use comprehensive JSON)
+        if state_name.lower() == "new york":
+            # NY specific prompt for detailed descriptions
+            prompt = f"""
+You are a tax analysis expert specializing in {config.entity_type.replace('_', '-')} taxation in the {config.industry} industry.
+
+{entity_context}
+{industry_context}
 
 CONTENT TO ANALYZE:
 {content[:8000]}  # Limit content size
 
 EXTRACTION REQUIREMENTS:
-1. Find the standard corporate income tax rate (for general businesses)
-2. Find any capital-based tax rates
-3. Find minimum tax amounts or fixed dollar minimums
-4. Identify any special rates for specific business types
+{fields_instruction}
+
+1. ENI (Entire Net Income): Standard corporate income tax rate
+2. FDM (Fixed Dollar Minimum): Minimum tax amounts or ranges
+3. Capital: Capital-based tax rates (if applicable)
 
 OUTPUT FORMAT:
 Please respond in JSON format with this structure:
 {{
-    "standard_rate": "X.XX% or rate description",
-    "capital_rate": "X.XX% or N/A",
-    "minimum_tax": "$X to $Y or description",
-    "special_rates": ["list of special rates if any"],
-    "reasoning": "Brief explanation of how you found these rates",
+    "ENI_description": "Complete sentence describing ENI tax rates with full context and conditions, or N/A",
+    "FDM_description": "Complete sentence describing FDM tax amounts with ranges and conditions, or N/A", 
+    "Capital_description": "Complete sentence describing Capital tax rates with limits and conditions, or N/A",
+    "shipping_special_rule": "Any special rule for shipping industry or N/A",
+    "reasoning": "Brief technical analysis summary",
     "confidence": "high/medium/low",
     "source_sections": ["list of HTML sections or table names used"]
 }}
 
-Focus on finding rates that apply to "general business taxpayers" or "all other corporations".
-If you cannot find specific information, mark it as "N/A" but explain why in the reasoning.
+DESCRIPTION REQUIREMENTS:
+- ENI_description: Include the exact tax rate(s), thresholds, and conditions
+- FDM_description: Include the range and basis for calculation
+- Capital_description: Include the rate and any limits
+- Each description should be a complete, client-friendly sentence that can stand alone
+
+CRITICAL: Only include rates that apply to {config.entity_type.replace('_', '-')}s in {config.industry}.
+If no specific information is found, mark as "N/A" and explain why in reasoning.
+"""
+        else:
+            # Other states: comprehensive JSON for user review
+            prompt = f"""
+You are a tax analysis expert specializing in {config.entity_type.replace('_', '-')} taxation in the {config.industry} industry.
+
+{entity_context}
+{industry_context}
+
+CONTENT TO ANALYZE:
+{content[:8000]}  # Limit content size
+
+Please extract ALL available tax information for {state_name} state that applies to {config.entity_type.replace('_', '-')}s in {config.industry}.
+
+OUTPUT FORMAT:
+Please respond in JSON format with this structure:
+{{
+    "corporate_income_tax": "Rate and description or N/A",
+    "franchise_tax": "Rate and description or N/A",
+    "minimum_tax": "Amount/range and description or N/A",
+    "capital_tax": "Rate and description or N/A",
+    "gross_receipts_tax": "Rate and description or N/A",
+    "alternative_minimum_tax": "Rate and description or N/A",
+    "surcharge_tax": "Rate and description or N/A",
+    "special_industry_rates": "Any shipping/transportation specific rates or N/A",
+    "exemptions": "Any available exemptions or N/A",
+    "thresholds": "Income/revenue thresholds that affect rates or N/A",
+    "other_taxes": "Any other relevant business taxes or N/A",
+    "reasoning": "Summary of analysis and what tax structures apply",
+    "confidence": "high/medium/low",
+    "source_sections": ["list of HTML sections or table names used"]
+}}
+
+CRITICAL: Include ALL relevant tax information found, even if it doesn't fit standard categories.
+Mark items as "N/A" only if truly not found or not applicable.
 """
         
         try:
             response = self.model.generate_content(prompt)
             analysis_text = response.text.strip()
             
+            # Clean up JSON response - remove markdown formatting if present
+            if analysis_text.startswith("```json"):
+                analysis_text = analysis_text.replace("```json", "").replace("```", "").strip()
+            elif analysis_text.startswith("```"):
+                analysis_text = analysis_text.replace("```", "").strip()
+            
             # Try to parse JSON response
             try:
                 analysis_data = json.loads(analysis_text)
                 reasoning = analysis_data.get("reasoning", "No reasoning provided")
+                confidence = analysis_data.get("confidence", "unknown")
                 
-                # Convert to our standard format
-                result = {
-                    "Entire Net Income Base": analysis_data.get("standard_rate", "N/A"),
-                    "Business capital base": analysis_data.get("capital_rate", "N/A"),
-                    "Fixed dollar minimum tax": analysis_data.get("minimum_tax", "N/A")
-                }
+                if state_name.lower() == "new york":
+                    # NY specific processing - detailed descriptions
+                    eni_desc = analysis_data.get("ENI_description", "N/A")
+                    fdm_desc = analysis_data.get("FDM_description", "N/A") 
+                    capital_desc = analysis_data.get("Capital_description", "N/A")
+                    shipping_rule = analysis_data.get("shipping_special_rule", "N/A")
+                    
+                    # Build result based on included fields - using full descriptions
+                    included_fields = config.included_fields or ["ENI", "FDM", "Capital"]
+                    result = {}
+                    
+                    if "ENI" in included_fields and eni_desc != "N/A":
+                        result["ENI (Entire Net Income)"] = eni_desc
+                    if "FDM" in included_fields and fdm_desc != "N/A":
+                        result["FDM (Fixed Dollar Minimum)"] = fdm_desc
+                    if "Capital" in included_fields and capital_desc != "N/A":
+                        result["Capital (Business Capital Base)"] = capital_desc
+                    
+                    # Format enhanced reasoning log
+                    reasoning_log = f"""--- {state_name} Analysis ---
+ENI: {eni_desc}
+FDM: {fdm_desc}
+Capital: {capital_desc}
+Special shipping rule: {shipping_rule}
+Reasoning: {reasoning}
+Confidence: {confidence}"""
+                    
+                else:
+                    # Other states - comprehensive JSON data for user review
+                    result = {}
+                    json_data_parts = []
+                    
+                    # Include all non-N/A tax information
+                    for key, value in analysis_data.items():
+                        if key not in ["reasoning", "confidence", "source_sections"] and value != "N/A":
+                            result[key] = value
+                            json_data_parts.append(f"{key}: {value}")
+                    
+                    # Format reasoning log with all data
+                    reasoning_log = f"""--- {state_name} Analysis ---
+{chr(10).join(json_data_parts)}
+Reasoning: {reasoning}
+Confidence: {confidence}"""
                 
-                return result, f"--- {state_name} Analysis ---\n{reasoning}\nConfidence: {analysis_data.get('confidence', 'unknown')}"
+                return result, reasoning_log
                 
             except json.JSONDecodeError:
                 # Fallback: treat as plain text
@@ -248,7 +372,7 @@ class MultiStateTaxExtractor:
         analysis_result, reasoning = self.llm_engine.analyze_tax_content(
             raw_content, 
             config.state_name, 
-            "corporate income"
+            config
         )
         
         # 3. Store results
@@ -297,27 +421,43 @@ class MultiStateTaxExtractor:
         ws.append(headers)
         
         # Data rows
+        row_num = 2  # Start from row 2 (after headers)
         for state_code, result_data in self.results.items():
             config = result_data["config"]
             analysis = result_data["analysis"]
             
-            # Format tax summary
-            tax_summary = "; ".join([
-                f"{k}: {v}" for k, v in analysis.items() if v != "N/A"
-            ])
+            # Format tax summary based on included fields and non-N/A values
+            summary_parts = []
+            
+            for key, value in analysis.items():
+                if value and value != "N/A":
+                    # Use the full description as-is, with proper formatting
+                    summary_parts.append(f"**{key}:** {value}")
+            
+            tax_summary = "\n\n".join(summary_parts) if summary_parts else "No applicable rates found"
+            
+            # Add entity type and industry context
+            context_info = f"\n\n({config.entity_type.replace('_', '-')} in {config.industry})"
             
             row = [
                 config.state_name,
                 config.state_code,
                 config.nexus_standard,
                 config.nexus_effective_date,
-                tax_summary,
+                f"{tax_summary} {context_info}",
                 "",  # Tax rates (included in summary)
                 config.tax_definitions_url,
                 config.sales_factor_method,
                 config.sales_factor_date
             ]
             ws.append(row)
+            
+            # Add hyperlink to Source URL (column G, index 7)
+            url_cell = ws.cell(row=row_num, column=7)
+            url_cell.hyperlink = config.tax_definitions_url
+            url_cell.font = Font(color="0000FF", underline="single")  # Blue and underlined
+            
+            row_num += 1
         
         # Save Excel
         excel_path = output_dir / f"multi_state_tax_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
@@ -389,7 +529,19 @@ def create_example_state_configs():
     print(f"[Setup] Example state configs created in {configs_dir}")
 
 def main():
-    """Example usage of the multi-state framework"""
+    """Multi-state tax extraction for C-Corp shipping companies"""
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Extract tax rates for C-Corporation shipping companies')
+    parser.add_argument('--entity_type', default='C_corp', 
+                       help='Entity type (C_corp, S_corp, LLC, etc.)')
+    parser.add_argument('--industry', default='shipping',
+                       help='Industry type (shipping, manufacturing, retail, etc.)')
+    parser.add_argument('--states', nargs='*', default=['NY', 'CA', 'TX', 'FL', 'IL'],
+                       help='States to process (default: NY CA TX FL IL)')
+    
+    args = parser.parse_args()
     
     # Setup - Load API key securely
     from config_loader import get_gemini_api_key, validate_config
@@ -398,23 +550,48 @@ def main():
         print("[Error] Configuration validation failed!")
         return
     
+    print(f"[Config] Processing {len(args.states)} states for {args.entity_type.replace('_', '-')} in {args.industry} industry")
+    print(f"[Config] States: {', '.join(args.states)}")
+    
     api_key = get_gemini_api_key()
     output_dir = Path("multi_state_output")
-    
-    # Create example configs
-    create_example_state_configs()
     
     # Initialize extractor
     extractor = MultiStateTaxExtractor(api_key)
     
-    # Process all states
-    results = extractor.process_multiple_states(Path("state_configs"))
+    # Process specified states only
+    results = {}
+    configs_dir = Path("state_configs")
+    
+    for state_code in args.states:
+        config_file = configs_dir / f"{state_code.lower()}.yaml"
+        if config_file.exists():
+            try:
+                state_config = extractor.load_state_config(config_file)
+                
+                # Override entity type and industry if specified
+                if args.entity_type != 'C_corp' or args.industry != 'shipping':
+                    state_config.entity_type = args.entity_type
+                    state_config.industry = args.industry
+                    print(f"[Override] {state_code}: Using {args.entity_type} + {args.industry}")
+                
+                state_results = extractor.extract_state_taxes(state_config)
+                results[state_code] = state_results
+            except Exception as e:
+                print(f"[Error] Failed to process {state_code}: {e}")
+                results[state_code] = {"error": str(e)}
+        else:
+            print(f"[Warning] Config file not found for {state_code}: {config_file}")
     
     # Export results
     extractor.export_results(output_dir)
     
-    print("\n[Complete] Multi-state tax extraction finished!")
-    print(f"Results saved in {output_dir}")
+    print(f"\n[Complete] Processed {len(results)} states for {args.entity_type.replace('_', '-')} {args.industry} companies")
+    print(f"[Output] Results saved in {output_dir}")
+    
+    # Summary of results
+    successful = len([r for r in results.values() if not isinstance(r, dict) or "error" not in r])
+    print(f"[Summary] {successful}/{len(results)} states processed successfully")
 
 if __name__ == "__main__":
     main() 

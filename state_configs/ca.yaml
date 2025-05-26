@@ -1,17 +1,42 @@
-backup_urls:
-- https://www.ftb.ca.gov/forms/search/?query=corporation
+state_name: California
+state_code: CA
 base_url: https://www.ftb.ca.gov
+tax_definitions_url: https://www.ftb.ca.gov/file/business/tax-rates.html
+backup_urls:
+- https://www.ftb.ca.gov/businesses/index.html
+- https://www.ftb.ca.gov/forms/search/?query=corporation
+
+# Business context
+entity_type: C_corp
+industry: shipping
+included_fields:
+- ENI
+- FDM
+
+tax_types:
+- corporate_income
+
 extraction_hints:
   keywords:
+  - corporate income tax
   - corporation tax
   - franchise tax
   - tax rate
-nexus_effective_date: '2018'
+  - 8.84%
+  shipping_keywords:
+  - water transportation
+  - marine transportation
+  - shipping
+  known_rates:
+  - 8.84%
+
 nexus_standard: market base
-sales_factor_date: '2018'
+nexus_effective_date: '2018'
 sales_factor_method: market base
-state_code: CA
-state_name: California
-tax_definitions_url: https://www.ftb.ca.gov/businesses/index.html
-tax_types:
-- corporate_income
+sales_factor_date: '2018'
+
+fallback_selectors:
+  content_area:
+    - ".main-content"
+    - "#content"
+    - ".tax-content"
